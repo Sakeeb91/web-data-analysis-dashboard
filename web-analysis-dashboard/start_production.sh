@@ -15,8 +15,17 @@ fi
 source venv/bin/activate
 
 # Install dependencies
-echo "Installing dependencies..."
-pip install Flask Flask-SQLAlchemy Flask-CORS Flask-Login Flask-Migrate bcrypt PyJWT
+echo "Installing dependencies from requirements_production.txt..."
+if [ -f "requirements_production.txt" ]; then
+    pip install -r requirements_production.txt
+else
+    echo "requirements_production.txt not found, installing minimal set..."
+    pip install Flask Flask-SQLAlchemy Flask-CORS Flask-Login Flask-Migrate bcrypt PyJWT requests beautifulsoup4 transformers torch playwright psycopg2-binary
+fi
+
+# Ensure Playwright browsers are installed (ignore failure if not supported)
+python -m playwright install || true
+python -m playwright install-deps || true
 
 # Check if using PostgreSQL or SQLite
 echo ""
@@ -40,9 +49,15 @@ else
     export DATABASE_URL="sqlite:///production.db"
 fi
 
-# Initialize database
-echo "Initializing database..."
-python -c "from app_production import app, db; app.app_context().push(); db.create_all(); print('Database initialized!')"
+# Initialize database (Flask-Migrate). Falls back to create_all if CLI fails.
+export FLASK_APP=app_production.py
+echo "Initializing database (migrations)..."
+if [ ! -d "migrations" ]; then
+  flask db init || true
+fi
+flask db migrate -m "init" || true
+flask db upgrade || true
+python -c "from app_production import app, db; app.app_context().push(); db.create_all(); print('Database ensured!')" || true
 
 # Create admin user
 echo ""

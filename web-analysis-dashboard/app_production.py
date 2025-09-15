@@ -6,7 +6,7 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for, f
 from flask_cors import CORS
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_migrate import Migrate
-from werkzeug.security import generate_password_hash, check_password_hash
+import bcrypt
 import jwt
 
 from config import Config
@@ -109,10 +109,15 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True)
 
     def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
+        rounds = int(os.environ.get('BCRYPT_LOG_ROUNDS', '12'))
+        salt = bcrypt.gensalt(rounds=rounds)
+        self.password_hash = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
     def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
+        try:
+            return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
+        except Exception:
+            return False
 
     def generate_token(self):
         return jwt.encode(
@@ -226,8 +231,13 @@ async def scrape_url():
         if not url:
             return jsonify({'success': False, 'error': 'URL is required'}), 400
 
-        # Real web scraping
-        scraper = WebScraper({'use_playwright': True})
+        # Real web scraping with robots.txt compliance, UA rotation, and rate limiting
+        scraper = WebScraper({
+            'use_playwright': True,
+            'respect_robots': True,
+            'rotate_user_agent': True,
+            'rate_limit_interval': 1.5
+        })
         result = await scraper.scrape(url, selector)
 
         if result['success']:
