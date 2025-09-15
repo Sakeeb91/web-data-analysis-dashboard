@@ -10,6 +10,7 @@ from flask_wtf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from talisman import Talisman
+from sqlalchemy import text
 import bcrypt
 import jwt
 
@@ -36,7 +37,7 @@ csp = {
     'default-src': ["'self'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'],
     'img-src': ["'self'", 'data:', 'https:'],
     'style-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'],
-    'script-src': ["'self'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com']
+    'script-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com']
 }
 Talisman(app, content_security_policy=csp, force_https=False)
 
@@ -119,6 +120,32 @@ def init_sentiment_analyzer():
 
         sentiment_analyzer = MockSentimentAnalyzer()
         return False
+
+# API key auth helper (allow either login or valid API key) and schemas
+from functools import wraps
+from marshmallow import Schema, fields, ValidationError
+
+def require_api_key_or_login(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if current_user.is_authenticated:
+            return func(*args, **kwargs)
+        provided = request.headers.get('X-API-Key') or request.args.get('api_key')
+        if provided:
+            try:
+                # Compare against stored hashed keys
+                keys = APIKey.query.filter_by(is_active=True).all()
+                for k in keys:
+                    if bcrypt.checkpw(provided.encode('utf-8'), k.key.encode('utf-8')):
+                        return func(*args, **kwargs)
+            except Exception:
+                pass
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    return wrapper
+
+class ScrapeRequestSchema(Schema):
+    url = fields.Url(required=True)
+    selector = fields.String(required=False, allow_none=True)
 
 # User model for authentication
 from flask_login import UserMixin
@@ -246,6 +273,7 @@ def get_dashboard_stats():
 @app.route('/api/scrape', methods=['POST'])
 @limiter.limit("10/minute")
 @require_api_key_or_login
+@csrf.exempt
 async def scrape_url():
     """Scrape URL with real web scraping"""
     try:
@@ -353,7 +381,7 @@ def health_check():
     celery_ok = False
 
     try:
-        db.session.execute(db.text('SELECT 1'))
+        db.session.execute(text('SELECT 1'))
         db_ok = True
     except Exception:
         db_ok = False
@@ -384,35 +412,8 @@ def health_check():
 # Celery enqueue/status endpoints
 @app.route('/api/tasks/scrape', methods=['POST'])
 @limiter.limit("10/minute")
-# API key auth helper (allow either login or valid API key)
-from functools import wraps
-import secrets
-
-def require_api_key_or_login(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if current_user.is_authenticated:
-            return func(*args, **kwargs)
-        provided = request.headers.get('X-API-Key') or request.args.get('api_key')
-        if provided:
-            try:
-                # Compare against stored hashed keys
-                keys = APIKey.query.filter_by(is_active=True).all()
-                for k in keys:
-                    if bcrypt.checkpw(provided.encode('utf-8'), k.key.encode('utf-8')):
-                        return func(*args, **kwargs)
-            except Exception:
-                pass
-        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
-    return wrapper
-
-# Schemas
-from marshmallow import Schema, fields, ValidationError
-
-class ScrapeRequestSchema(Schema):
-    url = fields.Url(required=True)
-    selector = fields.String(required=False, allow_none=True)
 @require_api_key_or_login
+@csrf.exempt
 def enqueue_scrape_task():
     data = request.get_json(force=True, silent=True) or {}
     try:
@@ -455,6 +456,7 @@ def create_admin():
 def create_api_key():
     """Create and store a new API key (hashed). Prints the key once."""
     import getpass
+    import secrets
     label = input("Key label (optional): ")
     user_id = input("User ID to associate (optional): ")
     token = secrets.token_urlsafe(32)
