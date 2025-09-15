@@ -386,17 +386,23 @@ def health_check():
 @limiter.limit("10/minute")
 # API key auth helper (allow either login or valid API key)
 from functools import wraps
+import secrets
 
 def require_api_key_or_login(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         if current_user.is_authenticated:
             return func(*args, **kwargs)
-        api_key = request.headers.get('X-API-Key') or request.args.get('api_key')
-        if api_key:
-            key = APIKey.query.filter_by(key=api_key, is_active=True).first()
-            if key:
-                return func(*args, **kwargs)
+        provided = request.headers.get('X-API-Key') or request.args.get('api_key')
+        if provided:
+            try:
+                # Compare against stored hashed keys
+                keys = APIKey.query.filter_by(is_active=True).all()
+                for k in keys:
+                    if bcrypt.checkpw(provided.encode('utf-8'), k.key.encode('utf-8')):
+                        return func(*args, **kwargs)
+            except Exception:
+                pass
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
     return wrapper
 
@@ -444,6 +450,24 @@ def create_admin():
     db.session.add(user)
     db.session.commit()
     print(f"Admin user '{username}' created!")
+
+@app.cli.command()
+def create_api_key():
+    """Create and store a new API key (hashed). Prints the key once."""
+    import getpass
+    label = input("Key label (optional): ")
+    user_id = input("User ID to associate (optional): ")
+    token = secrets.token_urlsafe(32)
+    rounds = int(os.environ.get('BCRYPT_LOG_ROUNDS', '12'))
+    salt = bcrypt.gensalt(rounds=rounds)
+    key_hash = bcrypt.hashpw(token.encode('utf-8'), salt).decode('utf-8')
+
+    api_key = APIKey(key=key_hash, user_id=int(user_id) if user_id.strip().isdigit() else None, label=label or None, is_active=True)
+    db.session.add(api_key)
+    db.session.commit()
+    print("\nAPI Key created. Store this secret now; it will not be shown again:\n")
+    print(token)
+    print("\nAssociated record id:", api_key.id)
 
 if __name__ == '__main__':
     with app.app_context():
