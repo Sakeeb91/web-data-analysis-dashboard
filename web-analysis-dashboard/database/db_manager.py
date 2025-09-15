@@ -13,7 +13,13 @@ class DatabaseManager:
             self.init_app(app)
 
     def init_app(self, app):
-        self.db.init_app(app)
+        try:
+            # Avoid double-initialization if SQLAlchemy already registered
+            if not getattr(app, 'extensions', None) or 'sqlalchemy' not in app.extensions:
+                self.db.init_app(app)
+        except Exception:
+            # Best-effort safeguard
+            pass
         with app.app_context():
             self.db.create_all()
 
