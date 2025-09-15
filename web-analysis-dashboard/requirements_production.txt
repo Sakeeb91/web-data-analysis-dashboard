@@ -1,0 +1,45 @@
+# Core Flask
+Flask==3.0.0
+Flask-SQLAlchemy==3.1.1
+Flask-CORS==4.0.0
+Flask-Login==0.6.3
+Flask-WTF==1.2.1
+Flask-Migrate==4.0.5
+
+# Database
+psycopg2-binary==2.9.9
+SQLAlchemy==2.0.23
+alembic==1.13.1
+
+# Web Scraping
+playwright==1.40.0
+beautifulsoup4==4.12.2
+requests==2.31.0
+fake-useragent==1.4.0
+
+# ML/NLP - Using more compatible versions
+transformers==4.36.2
+torch>=2.0.0
+sentencepiece==0.1.99
+protobuf==4.25.1
+
+# Background Tasks
+celery==5.3.4
+redis==5.0.1
+
+# Authentication
+PyJWT==2.8.0
+bcrypt==4.1.2
+email-validator==2.1.0
+
+# Utilities
+python-dotenv==1.0.0
+APScheduler==3.10.4
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Development
+pytest==7.4.3
+pytest-cov==4.1.0
+black==23.12.1
+flake8==7.0.0

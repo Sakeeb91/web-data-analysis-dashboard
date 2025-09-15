@@ -1,0 +1,452 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - Web Data Analysis{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1>Advanced Analytics</h1>
+        <p class="text-muted">Detailed sentiment analysis and trends</p>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-3">
+        <label for="periodType" class="form-label">Aggregation Period</label>
+        <select class="form-select" id="periodType" onchange="updateAnalytics()">
+            <option value="hourly">Hourly</option>
+            <option value="daily" selected>Daily</option>
+            <option value="weekly">Weekly</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label for="daysRange" class="form-label">Date Range</label>
+        <select class="form-select" id="daysRange" onchange="updateAnalytics()">
+            <option value="7">Last 7 Days</option>
+            <option value="14">Last 14 Days</option>
+            <option value="30" selected>Last 30 Days</option>
+            <option value="90">Last 90 Days</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label for="sourceSelect" class="form-label">Source Filter</label>
+        <select class="form-select" id="sourceSelect" onchange="updateAnalytics()">
+            <option value="">All Sources</option>
+        </select>
+    </div>
+    <div class="col-md-3 d-flex align-items-end">
+        <button class="btn btn-primary" onclick="updateAnalytics()">
+            <i class="bi bi-arrow-clockwise"></i> Update
+        </button>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Sentiment Score Trend</h5>
+            </div>
+            <div class="card-body" style="height: 400px;">
+                <canvas id="trendChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Sentiment Volume Over Time</h5>
+            </div>
+            <div class="card-body" style="height: 350px;">
+                <canvas id="volumeChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Confidence Distribution</h5>
+            </div>
+            <div class="card-body" style="height: 350px;">
+                <canvas id="confidenceChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Aggregated Data Table</h5>
+            </div>
+            <div class="card-body">
+                <table id="aggregatedTable" class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Period</th>
+                            <th>Total Items</th>
+                            <th>Positive</th>
+                            <th>Negative</th>
+                            <th>Neutral</th>
+                            <th>Avg Score</th>
+                            <th>Avg Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody id="aggregatedTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Key Metrics</h5>
+            </div>
+            <div class="card-body">
+                <dl class="row">
+                    <dt class="col-sm-6">Overall Sentiment:</dt>
+                    <dd class="col-sm-6" id="overallSentiment">-</dd>
+
+                    <dt class="col-sm-6">Trend Direction:</dt>
+                    <dd class="col-sm-6" id="trendDirection">-</dd>
+
+                    <dt class="col-sm-6">Change Rate:</dt>
+                    <dd class="col-sm-6" id="changeRate">-</dd>
+
+                    <dt class="col-sm-6">Peak Period:</dt>
+                    <dd class="col-sm-6" id="peakPeriod">-</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5>Scraping Jobs Status</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Job ID</th>
+                            <th>Status</th>
+                            <th>Next Run</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobsTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let trendChart;
+let volumeChart;
+let confidenceChart;
+
+$(document).ready(function() {
+    initializeAnalyticsCharts();
+    loadSourcesForAnalytics();
+    updateAnalytics();
+    loadJobs();
+    setInterval(loadJobs, 30000);
+});
+
+function initializeAnalyticsCharts() {
+    const trendCtx = document.getElementById('trendChart').getContext('2d');
+    trendChart = new Chart(trendCtx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Average Sentiment Score',
+                data: [],
+                borderColor: '#007bff',
+                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                tension: 0.3,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    min: -1,
+                    max: 1,
+                    ticks: {
+                        callback: function(value) {
+                            if (value > 0.5) return 'Very Positive';
+                            if (value > 0) return 'Positive';
+                            if (value === 0) return 'Neutral';
+                            if (value > -0.5) return 'Negative';
+                            return 'Very Negative';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    const volumeCtx = document.getElementById('volumeChart').getContext('2d');
+    volumeChart = new Chart(volumeCtx, {
+        type: 'bar',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Positive',
+                    data: [],
+                    backgroundColor: '#28a745'
+                },
+                {
+                    label: 'Negative',
+                    data: [],
+                    backgroundColor: '#dc3545'
+                },
+                {
+                    label: 'Neutral',
+                    data: [],
+                    backgroundColor: '#ffc107'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { stacked: true },
+                y: { stacked: true }
+            }
+        }
+    });
+
+    const confidenceCtx = document.getElementById('confidenceChart').getContext('2d');
+    confidenceChart = new Chart(confidenceCtx, {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: 'Score vs Confidence',
+                data: [],
+                backgroundColor: 'rgba(0, 123, 255, 0.5)'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Sentiment Score'
+                    },
+                    min: -1,
+                    max: 1
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Confidence'
+                    },
+                    min: 0,
+                    max: 1
+                }
+            }
+        }
+    });
+}
+
+function updateAnalytics() {
+    const periodType = $('#periodType').val();
+    const days = $('#daysRange').val();
+    const source = $('#sourceSelect').val();
+
+    $.get(`/api/aggregated/${periodType}?days=${days}${source ? '&source=' + source : ''}`)
+        .done(function(response) {
+            if (response.success) {
+                updateAnalyticsCharts(response.data);
+                updateAggregatedTable(response.data);
+                calculateMetrics(response.data);
+            }
+        });
+
+    loadConfidenceData();
+}
+
+function updateAnalyticsCharts(data) {
+    const labels = data.map(d => {
+        const date = new Date(d.period);
+        const periodType = $('#periodType').val();
+        if (periodType === 'hourly') {
+            return date.toLocaleString();
+        } else if (periodType === 'weekly') {
+            return `Week of ${date.toLocaleDateString()}`;
+        }
+        return date.toLocaleDateString();
+    });
+
+    const scores = data.map(d => d.average_score);
+    const positive = data.map(d => d.sentiment_distribution.positive);
+    const negative = data.map(d => d.sentiment_distribution.negative);
+    const neutral = data.map(d => d.sentiment_distribution.neutral);
+
+    trendChart.data.labels = labels;
+    trendChart.data.datasets[0].data = scores;
+    trendChart.update();
+
+    volumeChart.data.labels = labels;
+    volumeChart.data.datasets[0].data = positive;
+    volumeChart.data.datasets[1].data = negative;
+    volumeChart.data.datasets[2].data = neutral;
+    volumeChart.update();
+}
+
+function updateAggregatedTable(data) {
+    const tbody = $('#aggregatedTableBody');
+    tbody.empty();
+
+    data.forEach(item => {
+        const row = `
+            <tr>
+                <td>${new Date(item.period).toLocaleDateString()}</td>
+                <td>${item.total_items}</td>
+                <td class="text-success">${item.sentiment_distribution.positive}</td>
+                <td class="text-danger">${item.sentiment_distribution.negative}</td>
+                <td class="text-warning">${item.sentiment_distribution.neutral}</td>
+                <td>${item.average_score.toFixed(3)}</td>
+                <td>${(item.average_confidence * 100).toFixed(1)}%</td>
+            </tr>
+        `;
+        tbody.append(row);
+    });
+
+    if (!$.fn.DataTable.isDataTable('#aggregatedTable')) {
+        $('#aggregatedTable').DataTable({
+            order: [[0, 'desc']],
+            pageLength: 25
+        });
+    }
+}
+
+function calculateMetrics(data) {
+    if (data.length === 0) return;
+
+    const avgScore = data.reduce((sum, d) => sum + d.average_score, 0) / data.length;
+    let overallSentiment = 'Neutral';
+    if (avgScore > 0.2) overallSentiment = 'Positive';
+    else if (avgScore < -0.2) overallSentiment = 'Negative';
+
+    $('#overallSentiment').text(overallSentiment).removeClass().addClass(
+        overallSentiment === 'Positive' ? 'text-success' :
+        overallSentiment === 'Negative' ? 'text-danger' : 'text-warning'
+    );
+
+    const recent = data.slice(-7);
+    const older = data.slice(-14, -7);
+    if (recent.length && older.length) {
+        const recentAvg = recent.reduce((sum, d) => sum + d.average_score, 0) / recent.length;
+        const olderAvg = older.reduce((sum, d) => sum + d.average_score, 0) / older.length;
+        const change = ((recentAvg - olderAvg) / Math.abs(olderAvg || 1)) * 100;
+
+        $('#changeRate').text(`${change > 0 ? '+' : ''}${change.toFixed(1)}%`);
+        $('#trendDirection').text(
+            change > 10 ? 'Improving' :
+            change < -10 ? 'Declining' : 'Stable'
+        ).removeClass().addClass(
+            change > 10 ? 'text-success' :
+            change < -10 ? 'text-danger' : 'text-warning'
+        );
+    }
+
+    const peakItem = data.reduce((max, item) =>
+        item.total_items > (max?.total_items || 0) ? item : max, null);
+    if (peakItem) {
+        $('#peakPeriod').text(new Date(peakItem.period).toLocaleDateString());
+    }
+}
+
+function loadConfidenceData() {
+    const hours = $('#daysRange').val() * 24;
+
+    $.get(`/api/sentiments/recent?hours=${hours}&limit=200`)
+        .done(function(response) {
+            if (response.success) {
+                const scatterData = response.data
+                    .filter(d => d.score !== undefined && d.confidence !== undefined)
+                    .map(d => ({ x: d.score, y: d.confidence }));
+
+                confidenceChart.data.datasets[0].data = scatterData;
+                confidenceChart.update();
+            }
+        });
+}
+
+function loadSourcesForAnalytics() {
+    $.get('/api/sources')
+        .done(function(response) {
+            if (response.success) {
+                const select = $('#sourceSelect');
+                response.sources.forEach(source => {
+                    select.append(`<option value="${source}">${source}</option>`);
+                });
+            }
+        });
+}
+
+function loadJobs() {
+    $.get('/api/jobs')
+        .done(function(response) {
+            if (response.success) {
+                const tbody = $('#jobsTableBody');
+                tbody.empty();
+
+                response.active_jobs.forEach(job => {
+                    const nextRun = job.next_run ?
+                        new Date(job.next_run).toLocaleString() : 'N/A';
+
+                    const row = `
+                        <tr>
+                            <td>${job.id}</td>
+                            <td><span class="badge bg-success">Active</span></td>
+                            <td>${nextRun}</td>
+                            <td>
+                                <button class="btn btn-sm btn-primary" onclick="triggerJob('${job.id}')">
+                                    Run Now
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                    tbody.append(row);
+                });
+            }
+        });
+}
+
+function triggerJob(jobId) {
+    $.post(`/api/jobs/trigger/${jobId}`)
+        .done(function(response) {
+            if (response.success) {
+                alert('Job triggered successfully!');
+                setTimeout(updateAnalytics, 2000);
+            }
+        })
+        .fail(function() {
+            alert('Failed to trigger job');
+        });
+}
+</script>
+{% endblock %}

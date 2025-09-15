@@ -1,0 +1,38 @@
+# Core Flask - These work with Python 3.13
+Flask==3.0.0
+Flask-CORS==4.0.0
+Flask-Login==0.6.3
+Flask-Migrate==4.0.5
+
+# Database - Working alternatives
+peewee==3.17.0  # Simpler than SQLAlchemy for Python 3.13
+psycopg2-binary==2.9.9
+
+# Web Scraping - These work
+beautifulsoup4==4.12.2
+requests==2.31.0
+selenium==4.15.2  # Alternative to Playwright
+fake-useragent==1.4.0
+
+# Simple sentiment analysis (no heavy ML)
+textblob==0.17.1  # Lightweight sentiment analysis
+vaderSentiment==3.3.2  # Rule-based sentiment
+
+# Background Tasks
+celery==5.3.4
+redis==5.0.1
+
+# Authentication
+PyJWT==2.8.0
+bcrypt==4.1.2
+email-validator==2.1.0
+
+# Utilities
+python-dotenv==1.0.0
+APScheduler==3.10.4
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Development
+pytest==7.4.3
+black==23.12.1

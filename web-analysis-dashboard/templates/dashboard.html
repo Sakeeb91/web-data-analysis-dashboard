@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Web Data Analysis{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1>Sentiment Analysis Dashboard</h1>
+        <p class="text-muted">Real-time monitoring of web content sentiment</p>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-3">
+        <label for="daysFilter" class="form-label">Time Period</label>
+        <select class="form-select" id="daysFilter" onchange="updateDashboard()">
+            <option value="1">Last 24 Hours</option>
+            <option value="7" selected>Last 7 Days</option>
+            <option value="30">Last 30 Days</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label for="sourceFilter" class="form-label">Source</label>
+        <select class="form-select" id="sourceFilter" onchange="updateDashboard()">
+            <option value="">All Sources</option>
+        </select>
+    </div>
+    <div class="col-md-6 d-flex align-items-end">
+        <button class="btn btn-primary ms-auto" onclick="showScrapeModal()">
+            <i class="bi bi-plus-circle"></i> Add URL
+        </button>
+        <button class="btn btn-success ms-2" onclick="updateDashboard()">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Total Analyzed</h5>
+                <h2 class="text-primary" id="totalAnalyzed">0</h2>
+                <small class="text-muted">Items processed</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Positive</h5>
+                <h2 class="text-success" id="positiveCount">0</h2>
+                <small class="text-muted" id="positivePercent">0%</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Negative</h5>
+                <h2 class="text-danger" id="negativeCount">0</h2>
+                <small class="text-muted" id="negativePercent">0%</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title">Neutral</h5>
+                <h2 class="text-warning" id="neutralCount">0</h2>
+                <small class="text-muted" id="neutralPercent">0%</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Sentiment Distribution</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="sentimentPieChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Sentiment Trend</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="sentimentLineChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Recent Sentiment Analysis</h5>
+            </div>
+            <div class="card-body">
+                <table id="sentimentTable" class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Source</th>
+                            <th>Text Preview</th>
+                            <th>Sentiment</th>
+                            <th>Score</th>
+                            <th>Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sentimentTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="scrapeModal" tabindex="-1" aria-labelledby="scrapeModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="scrapeModalLabel">Add URL for Analysis</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="scrapeForm">
+                    <div class="mb-3">
+                        <label for="urlInput" class="form-label">URL</label>
+                        <input type="url" class="form-control" id="urlInput" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="selectorInput" class="form-label">CSS Selector (Optional)</label>
+                        <input type="text" class="form-control" id="selectorInput" placeholder="e.g., article.content">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitScrape()">Analyze</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let sentimentPieChart;
+let sentimentLineChart;
+
+$(document).ready(function() {
+    initializeCharts();
+    loadSources();
+    updateDashboard();
+    setInterval(updateDashboard, 60000);
+});
+
+function initializeCharts() {
+    const pieCtx = document.getElementById('sentimentPieChart').getContext('2d');
+    sentimentPieChart = new Chart(pieCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Positive', 'Negative', 'Neutral'],
+            datasets: [{
+                data: [0, 0, 0],
+                backgroundColor: ['#28a745', '#dc3545', '#ffc107']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+
+    const lineCtx = document.getElementById('sentimentLineChart').getContext('2d');
+    sentimentLineChart = new Chart(lineCtx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Average Score',
+                data: [],
+                borderColor: '#007bff',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    min: -1,
+                    max: 1
+                }
+            }
+        }
+    });
+}
+
+function updateDashboard() {
+    const days = $('#daysFilter').val();
+    const source = $('#sourceFilter').val();
+
+    $.get(`/api/dashboard/stats?days=${days}${source ? '&source=' + source : ''}`)
+        .done(function(response) {
+            if (response.success) {
+                updateStats(response.stats);
+                updateTrends(response.trends);
+            }
+        });
+
+    $.get(`/api/aggregated/daily?days=${days}${source ? '&source=' + source : ''}`)
+        .done(function(response) {
+            if (response.success) {
+                updateLineChart(response.data);
+            }
+        });
+
+    loadRecentSentiments();
+}
+
+function updateStats(stats) {
+    const total = stats.sentiment_distribution.positive +
+                  stats.sentiment_distribution.negative +
+                  stats.sentiment_distribution.neutral;
+
+    $('#totalAnalyzed').text(total);
+    $('#positiveCount').text(stats.sentiment_distribution.positive);
+    $('#negativeCount').text(stats.sentiment_distribution.negative);
+    $('#neutralCount').text(stats.sentiment_distribution.neutral);
+
+    if (total > 0) {
+        $('#positivePercent').text(((stats.sentiment_distribution.positive / total) * 100).toFixed(1) + '%');
+        $('#negativePercent').text(((stats.sentiment_distribution.negative / total) * 100).toFixed(1) + '%');
+        $('#neutralPercent').text(((stats.sentiment_distribution.neutral / total) * 100).toFixed(1) + '%');
+
+        sentimentPieChart.data.datasets[0].data = [
+            stats.sentiment_distribution.positive,
+            stats.sentiment_distribution.negative,
+            stats.sentiment_distribution.neutral
+        ];
+        sentimentPieChart.update();
+    }
+}
+
+function updateTrends(trends) {
+    if (trends.direction) {
+        let trendIcon = '';
+        let trendClass = '';
+
+        if (trends.direction === 'improving') {
+            trendIcon = '<i class="bi bi-arrow-up-circle text-success"></i>';
+            trendClass = 'text-success';
+        } else if (trends.direction === 'declining') {
+            trendIcon = '<i class="bi bi-arrow-down-circle text-danger"></i>';
+            trendClass = 'text-danger';
+        } else {
+            trendIcon = '<i class="bi bi-dash-circle text-warning"></i>';
+            trendClass = 'text-warning';
+        }
+    }
+}
+
+function updateLineChart(data) {
+    const labels = data.map(d => new Date(d.period).toLocaleDateString());
+    const scores = data.map(d => d.average_score);
+
+    sentimentLineChart.data.labels = labels;
+    sentimentLineChart.data.datasets[0].data = scores;
+    sentimentLineChart.update();
+}
+
+function loadRecentSentiments() {
+    const hours = $('#daysFilter').val() * 24;
+    const source = $('#sourceFilter').val();
+
+    $.get(`/api/sentiments/recent?hours=${hours}${source ? '&source=' + source : ''}&limit=50`)
+        .done(function(response) {
+            if (response.success) {
+                updateSentimentTable(response.data);
+            }
+        });
+}
+
+function updateSentimentTable(data) {
+    const tbody = $('#sentimentTableBody');
+    tbody.empty();
+
+    data.forEach(item => {
+        const sentimentClass = item.sentiment === 'positive' ? 'text-success' :
+                               item.sentiment === 'negative' ? 'text-danger' : 'text-warning';
+
+        const row = `
+            <tr>
+                <td>${new Date(item.analyzed_at).toLocaleString()}</td>
+                <td>${item.source_name || 'Unknown'}</td>
+                <td>${item.text_snippet ? item.text_snippet.substring(0, 100) + '...' : ''}</td>
+                <td><span class="${sentimentClass}">${item.sentiment}</span></td>
+                <td>${item.score ? item.score.toFixed(3) : '0'}</td>
+                <td>${item.confidence ? (item.confidence * 100).toFixed(1) + '%' : '0%'}</td>
+            </tr>
+        `;
+        tbody.append(row);
+    });
+
+    if (!$.fn.DataTable.isDataTable('#sentimentTable')) {
+        $('#sentimentTable').DataTable({
+            order: [[0, 'desc']],
+            pageLength: 10
+        });
+    }
+}
+
+function loadSources() {
+    $.get('/api/sources')
+        .done(function(response) {
+            if (response.success) {
+                const select = $('#sourceFilter');
+                response.sources.forEach(source => {
+                    select.append(`<option value="${source}">${source}</option>`);
+                });
+            }
+        });
+}
+
+function showScrapeModal() {
+    $('#scrapeModal').modal('show');
+}
+
+function submitScrape() {
+    const url = $('#urlInput').val();
+    const selector = $('#selectorInput').val();
+
+    if (!url) {
+        alert('Please enter a URL');
+        return;
+    }
+
+    const data = { url: url };
+    if (selector) {
+        data.selector = selector;
+    }
+
+    $.ajax({
+        url: '/api/scrape',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            if (response.success) {
+                $('#scrapeModal').modal('hide');
+                $('#urlInput').val('');
+                $('#selectorInput').val('');
+                alert('URL analyzed successfully!');
+                updateDashboard();
+            } else {
+                alert('Error: ' + response.error);
+            }
+        },
+        error: function() {
+            alert('Failed to analyze URL');
+        }
+    });
+}
+</script>
+{% endblock %}
