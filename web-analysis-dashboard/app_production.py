@@ -9,7 +9,7 @@ from flask_migrate import Migrate
 from flask_wtf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from talisman import Talisman
+from flask_talisman import Talisman
 from sqlalchemy import text
 import bcrypt
 import jwt
