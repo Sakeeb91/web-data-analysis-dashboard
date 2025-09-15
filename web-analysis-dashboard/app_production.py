@@ -6,11 +6,15 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for, f
 from flask_cors import CORS
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_migrate import Migrate
+from flask_wtf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from talisman import Talisman
 import bcrypt
 import jwt
 
 from config import Config
-from database import db, DatabaseManager
+from database import db, DatabaseManager, APIKey
 from scraper import WebScraper
 from analyzer import SentimentAnalyzer, DataAggregator
 
@@ -27,13 +31,32 @@ app.config.from_object(Config)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL') or 'sqlite:///production.db'
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'production-secret-key-change-this'
 
+# Security headers (Content Security Policy); HTTPS off for local
+csp = {
+    'default-src': ["'self'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'],
+    'img-src': ["'self'", 'data:', 'https:'],
+    'style-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'],
+    'script-src': ["'self'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com']
+}
+Talisman(app, content_security_policy=csp, force_https=False)
+
 # Initialize extensions
-CORS(app)
+allowed_origins = os.environ.get('CORS_ORIGINS')
+if allowed_origins:
+    origins = [o.strip() for o in allowed_origins.split(',') if o.strip()]
+    CORS(app, supports_credentials=True, origins=origins)
+else:
+    CORS(app, supports_credentials=True)
 db.init_app(app)
 migrate = Migrate(app, db)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+csrf = CSRFProtect(app)
+
+# Rate limiting
+rate_limit = os.environ.get('RATE_LIMIT', '100/hour')
+limiter = Limiter(get_remote_address, app=app, default_limits=[rate_limit])
 
 # Initialize managers
 db_manager = DatabaseManager(app)
@@ -196,7 +219,8 @@ def logout():
     return redirect(url_for('login'))
 
 @app.route('/api/dashboard/stats')
-@login_required
+@limiter.limit("30/minute")
+@require_api_key_or_login
 def get_dashboard_stats():
     """Get real dashboard statistics"""
     try:
@@ -220,13 +244,19 @@ def get_dashboard_stats():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/scrape', methods=['POST'])
-@login_required
+@limiter.limit("10/minute")
+@require_api_key_or_login
 async def scrape_url():
     """Scrape URL with real web scraping"""
     try:
-        data = request.json
-        url = data.get('url')
-        selector = data.get('selector')
+        data = request.get_json(force=True, silent=True) or {}
+        try:
+            payload = ScrapeRequestSchema().load(data)
+        except ValidationError as ve:
+            return jsonify({'success': False, 'error': ve.messages}), 400
+
+        url = payload.get('url')
+        selector = payload.get('selector')
 
         if not url:
             return jsonify({'success': False, 'error': 'URL is required'}), 400
@@ -261,7 +291,8 @@ async def scrape_url():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/sentiments/recent')
-@login_required
+@limiter.limit("60/minute")
+@require_api_key_or_login
 def get_recent_sentiments():
     """Get recent real sentiment analysis results"""
     try:
@@ -284,7 +315,8 @@ def get_recent_sentiments():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/aggregated/<period_type>')
-@login_required
+@limiter.limit("60/minute")
+@require_api_key_or_login
 def get_aggregated_data(period_type):
     """Get real aggregated data"""
     try:
@@ -315,13 +347,83 @@ def analytics():
 
 @app.route('/api/health')
 def health_check():
-    """Health check endpoint"""
+    """Enhanced health check: DB, Redis, Celery"""
+    db_ok = False
+    redis_ok = False
+    celery_ok = False
+
+    try:
+        db.session.execute(db.text('SELECT 1'))
+        db_ok = True
+    except Exception:
+        db_ok = False
+
+    try:
+        import redis as redislib
+        r = redislib.from_url(os.environ.get('REDIS_URL', 'redis://localhost:6379/0'))
+        redis_ok = r.ping()
+    except Exception:
+        redis_ok = False
+
+    try:
+        from celery_app import celery_app
+        resp = celery_app.control.ping(timeout=1.0)
+        celery_ok = bool(resp)
+    except Exception:
+        celery_ok = False
+
     return jsonify({
-        'status': 'healthy',
+        'status': 'healthy' if (db_ok and redis_ok) else 'degraded',
         'timestamp': datetime.utcnow().isoformat(),
         'sentiment_analyzer': 'active' if sentiment_analyzer else 'mock',
-        'database': 'connected'
+        'database': db_ok,
+        'redis': redis_ok,
+        'celery': celery_ok
     })
+
+# Celery enqueue/status endpoints
+@app.route('/api/tasks/scrape', methods=['POST'])
+@limiter.limit("10/minute")
+# API key auth helper (allow either login or valid API key)
+from functools import wraps
+
+def require_api_key_or_login(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if current_user.is_authenticated:
+            return func(*args, **kwargs)
+        api_key = request.headers.get('X-API-Key') or request.args.get('api_key')
+        if api_key:
+            key = APIKey.query.filter_by(key=api_key, is_active=True).first()
+            if key:
+                return func(*args, **kwargs)
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    return wrapper
+
+# Schemas
+from marshmallow import Schema, fields, ValidationError
+
+class ScrapeRequestSchema(Schema):
+    url = fields.Url(required=True)
+    selector = fields.String(required=False, allow_none=True)
+@require_api_key_or_login
+def enqueue_scrape_task():
+    data = request.get_json(force=True, silent=True) or {}
+    try:
+        payload = ScrapeRequestSchema().load(data)
+    except ValidationError as ve:
+        return jsonify({'success': False, 'error': ve.messages}), 400
+    from celery_app import scrape_and_analyze
+    ar = scrape_and_analyze.delay(payload.get('url'), payload.get('selector'))
+    return jsonify({'success': True, 'task_id': ar.id})
+
+@app.route('/api/tasks/<task_id>/status')
+@limiter.limit("60/minute")
+@require_api_key_or_login
+def task_status(task_id):
+    from celery_app import celery_app
+    res = celery_app.AsyncResult(task_id)
+    return jsonify({'id': task_id, 'state': res.state, 'result': res.result if res.ready() else None})
 
 # CLI commands for setup
 @app.cli.command()

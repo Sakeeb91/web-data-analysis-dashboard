@@ -1,6 +1,7 @@
 import os
 import asyncio
 from celery import Celery
+from celery.schedules import crontab
 
 
 def make_celery() -> Celery:
@@ -19,6 +20,18 @@ def make_celery() -> Celery:
         task_time_limit=600,
         task_soft_time_limit=540,
     )
+
+    # Optional beat schedule: environment-driven example
+    # If SCHEDULE_SCRAPE_URL is set, run scrape_and_analyze hourly
+    schedule_url = os.environ.get("SCHEDULE_SCRAPE_URL")
+    if schedule_url:
+        celery.conf.beat_schedule = {
+            "scheduled-scrape": {
+                "task": "scrape_and_analyze",
+                "schedule": crontab(minute=0),
+                "args": [schedule_url, None],
+            }
+        }
     return celery
 
 
@@ -80,4 +93,3 @@ def scrape_and_analyze(url: str, selector: str | None = None) -> dict:
             "scraped_id": scraped.id,
             "sentiments_saved": len(sentiments),
         }
-

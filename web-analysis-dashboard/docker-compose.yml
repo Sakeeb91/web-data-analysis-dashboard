@@ -74,6 +74,17 @@ services:
       - postgres
     command: ["bash", "-lc", "celery -A celery_app.celery_app beat --loglevel=INFO"]
 
+  flower:
+    image: mher/flower:2.0
+    container_name: web_analysis_flower
+    environment:
+      FLOWER_BROKER_URL: redis://redis:6379/0
+      FLOWER_PORT: 5555
+    depends_on:
+      - redis
+    ports:
+      - "5555:5555"
+
 volumes:
   postgres_data:
   redis_data:
