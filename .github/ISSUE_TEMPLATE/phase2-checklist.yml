@@ -1,0 +1,77 @@
+name: "Phase 2 – Essential: Hardening Checklist"
+description: Track the essential steps (API security, Celery, Docker, monitoring) for Phase 2
+title: "Phase 2 – Essential: Hardening Checklist"
+labels:
+  - phase:2
+  - type:enhancement
+  - priority:high
+assignees: []
+body:
+  - type:markdown
+    attributes:
+      value: |
+        This issue tracks Phase 2 of the Demo → Production roadmap.
+        Scope: API security, background jobs (Celery), Docker, and basic monitoring.
+
+  - type:checkboxes
+    id: api-security
+    attributes:
+      label: API Security
+      options:
+        - label: Rate limiting per user/IP (Flask-Limiter or gateway)
+        - label: API key management (issue/revoke keys)
+        - label: Input validation and sanitization on all endpoints
+        - label: Strict CORS configuration for production domains
+        - label: RBAC/authorization checks on sensitive routes
+        - label: CSRF protection for forms/session flows
+        - label: Security headers (HSTS, X-Content-Type-Options, etc.)
+
+  - type:checkboxes
+    id: background-jobs
+    attributes:
+      label: Background Jobs (Celery)
+      options:
+        - label: Celery app wired with Redis broker and result backend
+        - label: Async scraping and sentiment analysis tasks
+        - label: Scheduled jobs (APScheduler/Celery Beat) for periodic scraping
+        - label: Retries, timeouts, and visibility timeouts configured
+        - label: Basic task monitoring (flower or logs/metrics)
+
+  - type:checkboxes
+    id: docker-setup
+    attributes:
+      label: Docker Setup
+      options:
+        - label: Dockerfile with multi-stage build and non-root user
+        - label: docker-compose includes app, worker, beat, redis, postgres
+        - label: Environment variable management with .env files
+        - label: Healthchecks for app/worker containers
+        - label: Production-ready Gunicorn entrypoint for Flask
+
+  - type:checkboxes
+    id: monitoring
+    attributes:
+      label: Basic Monitoring
+      options:
+        - label: Error tracking (Sentry or similar) integrated
+        - label: Performance metrics (request latency, task durations)
+        - label: Uptime checks and /api/health enhanced with dependency checks
+        - label: Structured logging to stdout (JSON optional)
+
+  - type:textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Define the pass/fail criteria
+      value: |
+        - Hitting API too fast is throttled and logged
+        - A long-running scrape runs via Celery, persists results, and appears in UI
+        - `docker-compose up` brings up app+worker+redis+db, app serves via Gunicorn
+        - Intentional exception shows in error tracker with trace + user context
+
+  - type:markdown
+    attributes:
+      value: |
+        References:
+        - docs/demo-to-production-checklist.md (Phase 2)
+        - web-analysis-dashboard/docs/phase2-checklist.md
