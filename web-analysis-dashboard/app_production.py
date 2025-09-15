@@ -533,8 +533,9 @@ if __name__ == '__main__':
     print("\n" + "="*60)
     print(" Web Data Analysis Dashboard - PRODUCTION")
     print("="*60)
+    port = int(os.environ.get('PORT', '5000'))
     print("\n Starting production server...")
-    print(" Access at: http://localhost:5000")
+    print(f" Access at: http://localhost:{port}")
     print("\n Features:")
     print(" ✓ Real sentiment analysis (if models available)")
     print(" ✓ User authentication")
@@ -542,4 +543,4 @@ if __name__ == '__main__':
     print(" ✓ Web scraping ready")
     print("="*60 + "\n")
 
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=port)

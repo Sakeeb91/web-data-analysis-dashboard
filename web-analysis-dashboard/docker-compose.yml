@@ -14,7 +14,7 @@ services:
       - postgres
       - redis
     ports:
-      - "5000:5000"
+      - "5050:5000"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:5000/api/health || exit 1"]
       interval: 15s
@@ -83,7 +83,7 @@ services:
     depends_on:
       - redis
     ports:
-      - "5555:5555"
+      - "5055:5555"
 
 volumes:
   postgres_data:
