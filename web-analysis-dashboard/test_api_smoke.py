@@ -28,7 +28,7 @@ def seed_db(app):
             existing.is_active = True
         
         # Seed scraped + sentiments
-        s = ScrapedData(url="https://example.com", content="Hello world", metadata={}, success=True)
+    s = ScrapedData(url="https://example.com", content="Hello world", meta={}, success=True)
         db.session.add(s)
         db.session.commit()
 
@@ -74,4 +74,3 @@ def test_export_and_aggregated_endpoints():
     assert r3.status_code == 200
     assert r3.mimetype == "text/csv"
     assert len(r3.data) >= 1
-

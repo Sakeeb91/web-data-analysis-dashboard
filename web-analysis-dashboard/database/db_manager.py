@@ -24,7 +24,7 @@ class DatabaseManager:
                 source_name=data.get('source_name'),
                 title=data.get('metadata', {}).get('title'),
                 content=' '.join(data.get('texts', [])),
-                metadata=data.get('metadata'),
+                meta=data.get('metadata'),
                 scraped_at=data.get('scraped_at', datetime.utcnow()),
                 success=data.get('success', True),
                 error_message=data.get('error')

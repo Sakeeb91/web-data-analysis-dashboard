@@ -11,7 +11,7 @@ class ScrapedData(db.Model):
     source_name = db.Column(db.String(100))
     title = db.Column(db.String(500))
     content = db.Column(db.Text)
-    metadata = db.Column(db.JSON)
+    meta = db.Column(db.JSON)
     scraped_at = db.Column(db.DateTime, default=datetime.utcnow)
     success = db.Column(db.Boolean, default=True)
     error_message = db.Column(db.Text)
@@ -25,7 +25,7 @@ class ScrapedData(db.Model):
             'source_name': self.source_name,
             'title': self.title,
             'content': self.content[:500] if self.content else None,
-            'metadata': self.metadata,
+            'metadata': self.meta,
             'scraped_at': self.scraped_at.isoformat() if self.scraped_at else None,
             'success': self.success,
             'error_message': self.error_message
