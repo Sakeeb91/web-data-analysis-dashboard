@@ -2,7 +2,7 @@ import os
 import logging
 import asyncio
 from datetime import datetime, timedelta
-from flask import Flask, render_template, jsonify, request, redirect, url_for, flash
+from flask import Flask, render_template, jsonify, request, redirect, url_for, flash, Response
 from flask_cors import CORS
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_migrate import Migrate
@@ -18,6 +18,8 @@ from config import Config
 from database import db, DatabaseManager, APIKey
 from scraper import WebScraper
 from analyzer import SentimentAnalyzer, DataAggregator
+import io
+import pandas as pd
 
 # Configure logging
 logging.basicConfig(
@@ -357,6 +359,24 @@ def get_aggregated_data(period_type):
             source_name=source
         )
 
+        # Fallback: compute on the fly from recent sentiments if no persisted aggregates
+        if not data:
+            hours = max(days * 24, 1)
+            sentiments = db_manager.get_recent_sentiments(hours=hours, source_name=source)
+            aggregated = data_aggregator.aggregate_by_period(
+                sentiments,
+                period=period_type,
+                date_field='analyzed_at'
+            )
+            # Normalize period field for JSON
+            for item in aggregated:
+                if 'period' in item and item['period'] is not None:
+                    try:
+                        item['period'] = item['period'].isoformat()
+                    except Exception:
+                        item['period'] = str(item['period'])
+            data = aggregated
+
         return jsonify({
             'success': True,
             'data': data,
@@ -431,6 +451,40 @@ def task_status(task_id):
     from celery_app import celery_app
     res = celery_app.AsyncResult(task_id)
     return jsonify({'id': task_id, 'state': res.state, 'result': res.result if res.ready() else None})
+
+
+@app.route('/api/export/<format>')
+@limiter.limit("30/minute")
+@require_api_key_or_login
+def export_data(format):
+    try:
+        days = request.args.get('days', 7, type=int)
+        source = request.args.get('source')
+        hours = max(days * 24, 1)
+        sentiments = db_manager.get_recent_sentiments(hours=hours, source_name=source)
+
+        if format == 'json':
+            return jsonify({
+                'success': True,
+                'count': len(sentiments),
+                'data': sentiments,
+                'exported_at': datetime.utcnow().isoformat()
+            })
+        elif format == 'csv':
+            df = pd.DataFrame(sentiments)
+            csv_buffer = io.StringIO()
+            if not df.empty:
+                df.to_csv(csv_buffer, index=False)
+            content = csv_buffer.getvalue()
+            headers = {
+                'Content-Disposition': 'attachment; filename=sentiment_data.csv'
+            }
+            return Response(content, mimetype='text/csv', headers=headers)
+        else:
+            return jsonify({'success': False, 'error': 'Unsupported format'}), 400
+    except Exception as e:
+        logger.error(f"Error exporting data: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # CLI commands for setup
 @app.cli.command()
