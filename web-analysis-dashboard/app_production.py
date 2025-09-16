@@ -467,6 +467,18 @@ def task_status(task_id):
     return jsonify({'id': task_id, 'state': res.state, 'result': res.result if res.ready() else None})
 
 
+@app.route('/api/sources')
+@limiter.limit("60/minute")
+@require_api_key_or_login
+def get_sources_api():
+    try:
+        sources = db_manager.get_sources()
+        return jsonify({'success': True, 'sources': sources})
+    except Exception as e:
+        logger.error(f"Error getting sources: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/export/<format>')
 @limiter.limit("30/minute")
 @require_api_key_or_login
