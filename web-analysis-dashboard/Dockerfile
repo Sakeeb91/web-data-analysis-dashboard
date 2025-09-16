@@ -15,10 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements_production.txt /app/requirements_production.txt
 RUN pip install -r requirements_production.txt && pip install gunicorn
 
+# Install Playwright browsers and required OS deps
+RUN python -m playwright install --with-deps
+
 # Copy application code
 COPY . /app
 
 EXPOSE 5000
 
 CMD ["gunicorn", "wsgi:app", "--bind", "0.0.0.0:5000", "--workers", "2"]
-
