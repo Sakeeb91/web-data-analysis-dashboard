@@ -276,7 +276,7 @@ def get_dashboard_stats():
 @limiter.limit("10/minute")
 @require_api_key_or_login
 @csrf.exempt
-async def scrape_url():
+def scrape_url():
     """Scrape URL with real web scraping"""
     try:
         data = request.get_json(force=True, silent=True) or {}
@@ -298,7 +298,21 @@ async def scrape_url():
             'rotate_user_agent': True,
             'rate_limit_interval': 1.5
         })
-        result = await scraper.scrape(url, selector)
+        # Run async scraper within sync route
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Nested loop case (unlikely under gunicorn); create a new loop
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                result = new_loop.run_until_complete(scraper.scrape(url, selector))
+                new_loop.close()
+                asyncio.set_event_loop(loop)
+            else:
+                result = loop.run_until_complete(scraper.scrape(url, selector))
+        except RuntimeError:
+            # No event loop; simple run
+            result = asyncio.run(scraper.scrape(url, selector))
 
         if result['success']:
             # Save to database
