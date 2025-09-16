@@ -1,0 +1,9 @@
+{ 
+	email {$CADDY_EMAIL}
+}
+
+{$CADDY_DOMAIN} {
+	reverse_proxy app:5000
+	encode gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+}
