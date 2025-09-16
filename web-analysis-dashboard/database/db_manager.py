@@ -13,7 +13,13 @@ class DatabaseManager:
             self.init_app(app)
 
     def init_app(self, app):
-        self.db.init_app(app)
+        try:
+            # Avoid double-initialization if SQLAlchemy already registered
+            if not getattr(app, 'extensions', None) or 'sqlalchemy' not in app.extensions:
+                self.db.init_app(app)
+        except Exception:
+            # Best-effort safeguard
+            pass
         with app.app_context():
             self.db.create_all()
 
@@ -24,7 +30,7 @@ class DatabaseManager:
                 source_name=data.get('source_name'),
                 title=data.get('metadata', {}).get('title'),
                 content=' '.join(data.get('texts', [])),
-                metadata=data.get('metadata'),
+                meta=data.get('metadata'),
                 scraped_at=data.get('scraped_at', datetime.utcnow()),
                 success=data.get('success', True),
                 error_message=data.get('error')

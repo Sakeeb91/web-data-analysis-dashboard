@@ -333,7 +333,9 @@ function loadSources() {
 }
 
 function showScrapeModal() {
-    $('#scrapeModal').modal('show');
+    const el = document.getElementById('scrapeModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(el);
+    modal.show();
 }
 
 function submitScrape() {
@@ -357,7 +359,9 @@ function submitScrape() {
         data: JSON.stringify(data),
         success: function(response) {
             if (response.success) {
-                $('#scrapeModal').modal('hide');
+                const el = document.getElementById('scrapeModal');
+                const modal = bootstrap.Modal.getInstance(el) || bootstrap.Modal.getOrCreateInstance(el);
+                modal.hide();
                 $('#urlInput').val('');
                 $('#selectorInput').val('');
                 alert('URL analyzed successfully!');

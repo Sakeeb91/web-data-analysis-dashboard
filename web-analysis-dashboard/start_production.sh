@@ -81,7 +81,8 @@ fi
 echo ""
 echo "Starting application..."
 echo "==========================================="
-echo "Access the dashboard at: http://localhost:5000"
+PORT=${PORT:-5050}
+echo "Access the dashboard at: http://localhost:${PORT}"
 echo "Features enabled:"
 echo "✓ User Authentication"
 echo "✓ Real Web Scraping"
@@ -89,4 +90,4 @@ echo "✓ Database Persistence"
 echo "✓ Sentiment Analysis (mock mode if models not available)"
 echo "==========================================="
 
-python app_production.py
+PORT=${PORT} python app_production.py

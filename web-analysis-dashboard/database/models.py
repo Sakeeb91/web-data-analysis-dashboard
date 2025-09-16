@@ -11,7 +11,7 @@ class ScrapedData(db.Model):
     source_name = db.Column(db.String(100))
     title = db.Column(db.String(500))
     content = db.Column(db.Text)
-    metadata = db.Column(db.JSON)
+    meta = db.Column(db.JSON)
     scraped_at = db.Column(db.DateTime, default=datetime.utcnow)
     success = db.Column(db.Boolean, default=True)
     error_message = db.Column(db.Text)
@@ -25,7 +25,7 @@ class ScrapedData(db.Model):
             'source_name': self.source_name,
             'title': self.title,
             'content': self.content[:500] if self.content else None,
-            'metadata': self.metadata,
+            'metadata': self.meta,
             'scraped_at': self.scraped_at.isoformat() if self.scraped_at else None,
             'success': self.success,
             'error_message': self.error_message
@@ -108,5 +108,26 @@ class ScrapingJob(db.Model):
             'interval_minutes': self.interval_minutes,
             'last_run': self.last_run.isoformat() if self.last_run else None,
             'next_run': self.next_run.isoformat() if self.next_run else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class APIKey(db.Model):
+    __tablename__ = 'api_keys'
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(128), unique=True, nullable=False)
+    user_id = db.Column(db.Integer, nullable=True)
+    label = db.Column(db.String(120))
+    scopes = db.Column(db.String(256))
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'label': self.label,
+            'user_id': self.user_id,
+            'scopes': self.scopes,
+            'is_active': self.is_active,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
