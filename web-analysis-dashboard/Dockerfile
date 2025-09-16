@@ -1,5 +1,5 @@
 # Simple production image for the Flask app with Gunicorn
-FROM python:3.11-slim
+FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -7,16 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Base image already has necessary system deps for Playwright
 
 # Copy dependencies first
 COPY requirements_production.txt /app/requirements_production.txt
 RUN pip install -r requirements_production.txt && pip install gunicorn
-
-# Install Playwright browsers and required OS deps
-RUN python -m playwright install --with-deps
 
 # Copy application code
 COPY . /app
