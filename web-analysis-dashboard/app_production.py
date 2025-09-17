@@ -37,10 +37,11 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'production-secret-ke
 
 # Security headers (Content Security Policy); HTTPS off for local
 csp = {
-    'default-src': ["'self'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'],
+    'default-src': ["'self'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com', 'https://code.jquery.com', 'https://cdn.datatables.net'],
     'img-src': ["'self'", 'data:', 'https:'],
-    'style-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'],
-    'script-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com']
+    'style-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com', 'https://cdn.datatables.net', 'https://code.jquery.com'],
+    'script-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com', 'https://code.jquery.com', 'https://cdn.datatables.net'],
+    'font-src': ["'self'", 'data:', 'https:']
 }
 Talisman(app, content_security_policy=csp, force_https=False)
 
