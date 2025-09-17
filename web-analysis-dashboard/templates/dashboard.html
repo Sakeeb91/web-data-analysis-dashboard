@@ -161,6 +161,14 @@ $(document).ready(function() {
     loadSources();
     updateDashboard();
     setInterval(updateDashboard, 60000);
+    // Fallback event binding in case inline onclick is blocked
+    const btn = document.getElementById('analyzeBtn');
+    if (btn) {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            try { submitScrape(); } catch (err) { console.error('submitScrape error', err); alert('Unable to analyze: check console for details.'); }
+        });
+    }
 });
 
 function initializeCharts() {
