@@ -103,7 +103,7 @@ def get_aggregated_data(period_type):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/scrape', methods=['POST'])
-async def scrape_url():
+def scrape_url():
     try:
         data = request.json
         url = data.get('url')
@@ -113,7 +113,7 @@ async def scrape_url():
             return jsonify({'success': False, 'error': 'URL is required'}), 400
 
         scraper = WebScraper({'use_playwright': True})
-        result = await scraper.scrape(url, selector)
+        result = asyncio.run(scraper.scrape(url, selector))
 
         if result['success']:
             scraped = db_manager.save_scraped_data(result)
@@ -195,9 +195,9 @@ def get_scraping_jobs():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/jobs/trigger/<job_id>', methods=['POST'])
-async def trigger_job(job_id):
+def trigger_job(job_id):
     try:
-        await scraper_scheduler.run_job_now(job_id)
+        asyncio.run(scraper_scheduler.run_job_now(job_id))
         return jsonify({
             'success': True,
             'message': f'Job {job_id} triggered successfully'
@@ -246,10 +246,16 @@ def setup_scheduled_jobs():
                 interval_minutes=Config.SCRAPING_INTERVAL_MINUTES
             )
 
-    scraper_scheduler.start()
+    # Don't start the scheduler here since it requires an async context
+    # scraper_scheduler.start()
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port', type=int, default=5000, help='Port to run the app on')
+    args = parser.parse_args()
+
     init_sentiment_analyzer()
     setup_scheduled_jobs()
 
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=args.port)

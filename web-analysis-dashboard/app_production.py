@@ -11,6 +11,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
 from sqlalchemy import text
+from flask_caching import Cache
 import bcrypt
 import jwt
 
@@ -36,10 +37,11 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'production-secret-ke
 
 # Security headers (Content Security Policy); HTTPS off for local
 csp = {
-    'default-src': ["'self'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'],
+    'default-src': ["'self'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com', 'https://code.jquery.com', 'https://cdn.datatables.net'],
     'img-src': ["'self'", 'data:', 'https:'],
-    'style-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'],
-    'script-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com']
+    'style-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com', 'https://cdn.datatables.net', 'https://code.jquery.com'],
+    'script-src': ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com', 'https://code.jquery.com', 'https://cdn.datatables.net'],
+    'font-src': ["'self'", 'data:', 'https:']
 }
 Talisman(app, content_security_policy=csp, force_https=False)
 
@@ -59,7 +61,17 @@ csrf = CSRFProtect(app)
 
 # Rate limiting
 rate_limit = os.environ.get('RATE_LIMIT', '100/hour')
-limiter = Limiter(get_remote_address, app=app, default_limits=[rate_limit])
+storage_uri = os.environ.get('RATELIMIT_STORAGE_URL')
+limiter = Limiter(get_remote_address, app=app, default_limits=[rate_limit], storage_uri=storage_uri) if storage_uri else Limiter(get_remote_address, app=app, default_limits=[rate_limit])
+
+# Caching (Redis if CACHE_REDIS_URL provided)
+cache_config = {
+    'CACHE_TYPE': 'RedisCache' if os.environ.get('CACHE_REDIS_URL') else 'SimpleCache',
+    'CACHE_DEFAULT_TIMEOUT': int(os.environ.get('CACHE_DEFAULT_TIMEOUT', '60')),
+}
+if os.environ.get('CACHE_REDIS_URL'):
+    cache_config['CACHE_REDIS_URL'] = os.environ.get('CACHE_REDIS_URL')
+cache = Cache(app, config=cache_config)
 
 # Initialize managers
 db_manager = DatabaseManager(app)
@@ -366,12 +378,14 @@ def get_aggregated_data(period_type):
     try:
         days = request.args.get('days', 7, type=int)
         source = request.args.get('source')
-
-        data = db_manager.get_aggregated_data(
-            period_type=period_type,
-            days=days,
-            source_name=source
-        )
+        cache_key = f"agg:{period_type}:{days}:{source or 'all'}"
+        data = cache.get(cache_key)
+        if not data:
+            data = db_manager.get_aggregated_data(
+                period_type=period_type,
+                days=days,
+                source_name=source
+            )
 
         # Fallback: compute on the fly from recent sentiments if no persisted aggregates
         if not data:
@@ -390,6 +404,7 @@ def get_aggregated_data(period_type):
                     except Exception:
                         item['period'] = str(item['period'])
             data = aggregated
+        cache.set(cache_key, data, timeout=int(os.environ.get('CACHE_AGGREGATED_TTL', '120')))
 
         return jsonify({
             'success': True,
